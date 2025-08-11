@@ -97,23 +97,28 @@
             </div>
 
             <!-- Results Section -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Last Week's Winner -->
+                 <div class="card text-center">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">Last Week's Winner</h3>
+                    <div id="lastWeekWinner" class="winner-badge winner-arjun">Arjun</div>
+                </div>
                 <!-- Daily Winner -->
                 <div class="card text-center">
                     <h3 class="text-xl font-semibold mb-3 text-gray-800">Today's Winner</h3>
                     <div id="dailyWinner" class="winner-badge winner-pending">Pending...</div>
                 </div>
                 <!-- Weekly Score -->
-                <div class="card text-center col-span-1 md:col-span-2">
-                    <h3 class="text-xl font-semibold mb-3 text-gray-800">Weekly Score</h3>
+                <div class="card text-center">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">Current Week Score</h3>
                     <div class="flex justify-around items-center">
                         <div class="text-center">
                             <p class="text-blue-600 font-bold text-3xl" id="arjunWeeklyScore">0</p>
-                            <p class="text-sm text-gray-500">Arjun's Wins</p>
+                            <p class="text-sm text-gray-500">Arjun</p>
                         </div>
                         <div class="text-center">
                             <p class="text-green-600 font-bold text-3xl" id="rishilWeeklyScore">0</p>
-                            <p class="text-sm text-gray-500">Rishil's Wins</p>
+                            <p class="text-sm text-gray-500">Rishil</p>
                         </div>
                     </div>
                 </div>
@@ -121,7 +126,7 @@
             
             <!-- Weekly Winner -->
             <div class="card text-center">
-                <h2 class="text-2xl font-semibold mb-3 text-gray-800">Overall Weekly Winner</h2>
+                <h2 class="text-2xl font-semibold mb-3 text-gray-800">This Week's Status</h2>
                 <p id="weeklyWinner" class="text-3xl font-bold text-indigo-600">Calculating...</p>
             </div>
 
@@ -132,9 +137,9 @@
         // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, query, where, Timestamp, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // IMPORTANT: Use the configuration you provided
+        // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAJ9K9fQ0ThMB7aXB6qNHr3_yLUdqJgnCM",
             authDomain: "my-chain-reaction-game.firebaseapp.com",
@@ -150,24 +155,24 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Use a new collection for this game to keep data separate
+        // Collections
         const scoresCollection = collection(db, "zip-game-scores");
+        const weeklyWinnersCollection = collection(db, "zip-game-weekly-winners");
 
         // DOM Elements
         const loadingDiv = document.getElementById('loading');
         const appContentDiv = document.getElementById('app-content');
         const saveScoreBtn = document.getElementById('saveScoreBtn');
         const messageBox = document.getElementById('message-box');
-        
         const arjunMinsInput = document.getElementById('arjun-mins');
         const arjunSecsInput = document.getElementById('arjun-secs');
         const rishilMinsInput = document.getElementById('rishil-mins');
         const rishilSecsInput = document.getElementById('rishil-secs');
-
         const dailyWinnerDiv = document.getElementById('dailyWinner');
         const arjunWeeklyScoreSpan = document.getElementById('arjunWeeklyScore');
         const rishilWeeklyScoreSpan = document.getElementById('rishilWeeklyScore');
         const weeklyWinnerP = document.getElementById('weeklyWinner');
+        const lastWeekWinnerDiv = document.getElementById('lastWeekWinner');
 
         // Helper to show messages
         function showMessage(text, isError = false) {
@@ -176,21 +181,19 @@
             setTimeout(() => messageBox.textContent = '', 3000);
         }
 
-        // Get date string in YYYY-MM-DD format
-        function getTodayDateString() {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
+        // Date Helpers
+        function getDateString(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         }
 
-        // Get the start of the current week (Monday)
-        function getStartOfWeek() {
-            const now = new Date();
-            const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-            const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust for Sunday
-            const startOfWeek = new Date(now.setDate(diff));
+        function getStartOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const startOfWeek = new Date(d.setDate(diff));
             startOfWeek.setHours(0, 0, 0, 0);
             return startOfWeek;
         }
@@ -203,26 +206,24 @@
             const rishilSecs = parseInt(rishilSecsInput.value) || 0;
 
             if (arjunSecs > 59 || rishilSecs > 59) {
-                showMessage("Seconds must be between 0 and 59.", true);
-                return;
+                showMessage("Seconds must be between 0 and 59.", true); return;
             }
 
             const arjunTotalSeconds = arjunMins * 60 + arjunSecs;
             const rishilTotalSeconds = rishilMins * 60 + rishilSecs;
 
             if (arjunTotalSeconds <= 0 && rishilTotalSeconds <= 0) {
-                showMessage("Please enter valid times for at least one player.", true);
-                return;
+                showMessage("Please enter valid times for at least one player.", true); return;
             }
 
             let winner = 'Tie';
-            if (arjunTotalSeconds < rishilTotalSeconds) {
-                winner = 'Arjun';
-            } else if (rishilTotalSeconds < arjunTotalSeconds) {
-                winner = 'Rishil';
-            }
+            if (arjunTotalSeconds < rishilTotalSeconds && arjunTotalSeconds > 0) winner = 'Arjun';
+            else if (rishilTotalSeconds < arjunTotalSeconds && rishilTotalSeconds > 0) winner = 'Rishil';
+            else if (arjunTotalSeconds > 0 && rishilTotalSeconds <= 0) winner = 'Arjun';
+            else if (rishilTotalSeconds > 0 && arjunTotalSeconds <= 0) winner = 'Rishil';
 
-            const todayString = getTodayDateString();
+
+            const todayString = getDateString(new Date());
             const scoreData = {
                 arjunTime: { mins: arjunMins, secs: arjunSecs },
                 rishilTime: { mins: rishilMins, secs: rishilSecs },
@@ -232,70 +233,146 @@
             };
 
             try {
-                // Use the date string as the document ID to easily find/overwrite today's score
                 await setDoc(doc(scoresCollection, todayString), scoreData);
                 showMessage("Today's score saved successfully!", false);
-                arjunMinsInput.value = '';
-                arjunSecsInput.value = '';
-                rishilMinsInput.value = '';
-                rishilSecsInput.value = '';
+                arjunMinsInput.value = ''; arjunSecsInput.value = '';
+                rishilMinsInput.value = ''; rishilSecsInput.value = '';
             } catch (error) {
                 console.error("Error saving score: ", error);
-                showMessage("Failed to save score. Check console for details.", true);
+                showMessage("Failed to save score.", true);
             }
         });
+        
+        // --- New Logic for Weekly Winners ---
 
-        // Listen for score updates
+        async function archiveLastWeeksWinner() {
+            const today = new Date();
+            // Only run this check on Mondays
+            if (today.getDay() !== 1) return;
+
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(today.getDate() - 7);
+            const lastWeekStartDate = getStartOfWeek(sevenDaysAgo);
+            const lastWeekStartDateString = getDateString(lastWeekStartDate);
+
+            // Check if last week's winner is already archived
+            const winnerDocRef = doc(weeklyWinnersCollection, lastWeekStartDateString);
+            const winnerDocSnap = await getDoc(winnerDocRef);
+            if (winnerDocSnap.exists()) {
+                console.log("Last week's winner already archived.");
+                return;
+            }
+
+            // If not archived, calculate and save it
+            const lastWeekEndDate = new Date(lastWeekStartDate);
+            lastWeekEndDate.setDate(lastWeekStartDate.getDate() + 7);
+            
+            const q = query(scoresCollection, where("createdAt", ">=", lastWeekStartDate), where("createdAt", "<", lastWeekEndDate));
+            const querySnapshot = await getDocs(q);
+
+            let arjunWins = 0;
+            let rishilWins = 0;
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.winner === 'Arjun') arjunWins++;
+                else if (data.winner === 'Rishil') rishilWins++;
+            });
+
+            let weeklyWinner = 'Tie';
+            if (arjunWins > rishilWins) weeklyWinner = 'Arjun';
+            else if (rishilWins > arjunWins) weeklyWinner = 'Rishil';
+            
+            if (arjunWins > 0 || rishilWins > 0) {
+                 await setDoc(winnerDocRef, { winner: weeklyWinner, arjunWins, rishilWins, date: lastWeekStartDateString });
+                 console.log(`Archived winner for week starting ${lastWeekStartDateString}: ${weeklyWinner}`);
+                 displayLastWeeksWinner(); // Refresh the UI
+            }
+        }
+
+        async function displayLastWeeksWinner() {
+             const today = new Date();
+             const sevenDaysAgo = new Date();
+             sevenDaysAgo.setDate(today.getDate() - 7);
+             const lastWeekStartDate = getStartOfWeek(sevenDaysAgo);
+             const lastWeekStartDateString = getDateString(lastWeekStartDate);
+
+             const winnerDocRef = doc(weeklyWinnersCollection, lastWeekStartDateString);
+             const winnerDocSnap = await getDoc(winnerDocRef);
+
+             if (winnerDocSnap.exists()) {
+                 const winner = winnerDocSnap.data().winner;
+                 lastWeekWinnerDiv.textContent = winner;
+                 lastWeekWinnerDiv.className = `winner-badge winner-${winner.toLowerCase()}`;
+             } else {
+                 // Fallback if no winner is recorded for last week yet
+                 lastWeekWinnerDiv.textContent = 'Arjun'; // As requested
+                 lastWeekWinnerDiv.className = 'winner-badge winner-arjun';
+             }
+        }
+
+
+        // Listen for score updates for the CURRENT week
         function listenForScores() {
-            const startOfWeek = getStartOfWeek();
+            const startOfWeek = getStartOfWeek(new Date());
             const q = query(scoresCollection, where("createdAt", ">=", startOfWeek));
 
             onSnapshot(q, (querySnapshot) => {
                 let arjunWins = 0;
                 let rishilWins = 0;
-                const todayString = getTodayDateString();
+                const todayString = getDateString(new Date());
                 
-                // Reset daily winner display
                 dailyWinnerDiv.textContent = 'Pending...';
                 dailyWinnerDiv.className = 'winner-badge winner-pending';
 
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    if (data.winner === 'Arjun') {
-                        arjunWins++;
-                    } else if (data.winner === 'Rishil') {
-                        rishilWins++;
-                    }
+                    if (data.winner === 'Arjun') arjunWins++;
+                    else if (data.winner === 'Rishil') rishilWins++;
 
-                    // Check if this doc is for today and update the daily winner
                     if (doc.id === todayString) {
                         dailyWinnerDiv.textContent = data.winner;
                         dailyWinnerDiv.className = `winner-badge winner-${data.winner.toLowerCase()}`;
                     }
                 });
 
-                // Update weekly scores
                 arjunWeeklyScoreSpan.textContent = arjunWins;
                 rishilWeeklyScoreSpan.textContent = rishilWins;
 
-                // Update weekly winner
-                if (arjunWins > rishilWins) {
-                    weeklyWinnerP.textContent = 'Arjun is leading!';
-                    weeklyWinnerP.className = "text-3xl font-bold text-blue-600";
-                } else if (rishilWins > arjunWins) {
-                    weeklyWinnerP.textContent = 'Rishil is leading!';
-                     weeklyWinnerP.className = "text-3xl font-bold text-green-600";
-                } else {
-                    if (arjunWins === 0 && rishilWins === 0) {
-                         weeklyWinnerP.textContent = 'No games played this week.';
-                         weeklyWinnerP.className = "text-xl font-semibold text-gray-500";
+                // --- Updated Weekly Winner Logic ---
+                const isSunday = new Date().getDay() === 0;
+                const playedGames = arjunWins > 0 || rishilWins > 0;
+
+                if (isSunday && playedGames) {
+                    weeklyWinnerP.parentElement.querySelector('h2').textContent = "This Week's Winner!";
+                    if (arjunWins > rishilWins) {
+                        weeklyWinnerP.textContent = 'Arjun!';
+                        weeklyWinnerP.className = "text-4xl font-bold text-blue-600";
+                    } else if (rishilWins > arjunWins) {
+                        weeklyWinnerP.textContent = 'Rishil!';
+                        weeklyWinnerP.className = "text-4xl font-bold text-green-600";
                     } else {
-                        weeklyWinnerP.textContent = "It's a tie this week!";
-                        weeklyWinnerP.className = "text-3xl font-bold text-yellow-500";
+                        weeklyWinnerP.textContent = "It's a Tie!";
+                        weeklyWinnerP.className = "text-4xl font-bold text-yellow-500";
+                    }
+                } else {
+                     weeklyWinnerP.parentElement.querySelector('h2').textContent = "This Week's Status";
+                     if (arjunWins > rishilWins) {
+                        weeklyWinnerP.textContent = 'Arjun is leading!';
+                        weeklyWinnerP.className = "text-3xl font-bold text-blue-600";
+                    } else if (rishilWins > arjunWins) {
+                        weeklyWinnerP.textContent = 'Rishil is leading!';
+                        weeklyWinnerP.className = "text-3xl font-bold text-green-600";
+                    } else {
+                        if (!playedGames) {
+                            weeklyWinnerP.textContent = 'No games played this week.';
+                            weeklyWinnerP.className = "text-xl font-semibold text-gray-500";
+                        } else {
+                            weeklyWinnerP.textContent = "It's a tie!";
+                            weeklyWinnerP.className = "text-3xl font-bold text-yellow-500";
+                        }
                     }
                 }
                 
-                // Show the main content once data is loaded
                 loadingDiv.style.display = 'none';
                 appContentDiv.classList.remove('hidden');
 
@@ -311,11 +388,13 @@
             .then(() => {
                 console.log("Signed in anonymously.");
                 listenForScores();
+                displayLastWeeksWinner();
+                archiveLastWeeksWinner();
             })
             .catch((error) => {
                 console.error("Anonymous sign-in failed: ", error);
                 loadingDiv.textContent = "Authentication failed. Cannot load scores.";
-                 loadingDiv.classList.add('text-red-500');
+                loadingDiv.classList.add('text-red-500');
             });
 
     </script>
