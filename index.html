@@ -40,6 +40,13 @@
             border-color: #4B5563; /* gray-600 */
             color: #F9FAFB; /* gray-50 */
         }
+        .input-field:disabled {
+            background-color: #F3F4F6; /* gray-100 */
+            cursor: not-allowed;
+        }
+        .dark .input-field:disabled {
+            background-color: #4B5563; /* gray-600 */
+        }
         .winner-badge {
             display: inline-block;
             padding: 0.25rem 0.75rem;
@@ -58,9 +65,29 @@
             overflow: hidden;
             transition: max-height 0.5s ease-in-out;
         }
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .filter-btn.active {
+            background-color: #4F46E5; /* indigo-600 */
+            color: white;
+        }
+        .filter-btn:not(.active) {
+            background-color: #E5E7EB; /* gray-200 */
+        }
+        .dark .filter-btn:not(.active) {
+            background-color: #374151; /* gray-700 */
+            color: #D1D5DB; /* gray-300 */
+        }
+        .dark input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
     </style>
     <script>
-        // Immediately set theme to avoid FOUC (Flash of Unstyled Content)
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark')
         } else {
@@ -87,29 +114,35 @@
             <!-- Input Card -->
             <div class="card">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Enter Today's Scores</h2>
-                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Enter the time each player took to complete the game today. The player with the lesser time wins the day.</p>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Each player saves their own time. Once saved, the entry for the day is locked.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label for="arjun-mins" class="font-semibold text-lg text-blue-600 dark:text-blue-400">Arjun</label>
-                        <div class="input-group mt-2">
+                    <!-- Arjun's Column -->
+                    <div class="p-4 border rounded-lg dark:border-gray-700">
+                        <label class="font-semibold text-lg text-blue-600 dark:text-blue-400">Arjun</label>
+                        <div class="input-group my-2">
                             <input type="number" id="arjun-mins" placeholder="Mins" class="input-field" min="0">
                             <span class="text-gray-500 dark:text-gray-400">:</span>
                             <input type="number" id="arjun-secs" placeholder="Secs" class="input-field" min="0" max="59">
                         </div>
+                        <button id="save-arjun-btn" class="w-full mt-2 bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed">
+                            Save Arjun's Time
+                        </button>
+                        <div id="arjun-message" class="mt-2 text-center text-sm"></div>
                     </div>
-                    <div>
-                        <label for="rishil-mins" class="font-semibold text-lg text-green-600 dark:text-green-400">Rishil</label>
-                        <div class="input-group mt-2">
+                    <!-- Rishil's Column -->
+                    <div class="p-4 border rounded-lg dark:border-gray-700">
+                        <label class="font-semibold text-lg text-green-600 dark:text-green-400">Rishil</label>
+                        <div class="input-group my-2">
                             <input type="number" id="rishil-mins" placeholder="Mins" class="input-field" min="0">
                             <span class="text-gray-500 dark:text-gray-400">:</span>
                             <input type="number" id="rishil-secs" placeholder="Secs" class="input-field" min="0" max="59">
                         </div>
+                        <button id="save-rishil-btn" class="w-full mt-2 bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed">
+                            Save Rishil's Time
+                        </button>
+                        <div id="rishil-message" class="mt-2 text-center text-sm"></div>
                     </div>
                 </div>
-                <button id="saveScoreBtn" class="w-full mt-6 bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Save Today's Score
-                </button>
-                <div id="message-box" class="mt-4 text-center"></div>
             </div>
 
             <!-- Scoreboard Dropdown -->
@@ -165,6 +198,35 @@
                 <h2 class="text-2xl font-semibold mb-3 text-gray-800 dark:text-gray-100">This Week's Status</h2>
                 <p id="weeklyWinner" class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">Calculating...</p>
             </div>
+
+            <!-- History Section -->
+            <div class="card">
+                <h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">Game History & Calendar</h2>
+                <div class="flex flex-wrap gap-4 items-center mb-6">
+                    <div id="filter-controls" class="flex gap-2">
+                        <button class="filter-btn active" data-filter="week">This Week</button>
+                        <button class="filter-btn" data-filter="month">This Month</button>
+                        <button class="filter-btn" data-filter="year">This Year</button>
+                    </div>
+                    <input type="date" id="date-filter" class="input-field p-2 w-auto">
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="p-3 font-semibold text-sm text-gray-600 dark:text-gray-300">Date</th>
+                                <th class="p-3 font-semibold text-sm text-gray-600 dark:text-gray-300">Arjun's Time</th>
+                                <th class="p-3 font-semibold text-sm text-gray-600 dark:text-gray-300">Rishil's Time</th>
+                                <th class="p-3 font-semibold text-sm text-gray-600 dark:text-gray-300">Winner</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="divide-y divide-gray-200 dark:divide-gray-700">
+                        </tbody>
+                    </table>
+                     <p id="history-no-results" class="text-center text-gray-500 dark:text-gray-400 p-4 hidden">No records found for this period.</p>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -178,7 +240,6 @@
         const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
         const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
 
-        // Set initial icon state
         if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             themeToggleLightIcon.classList.remove('hidden');
         } else {
@@ -188,26 +249,13 @@
         themeToggleBtn.addEventListener('click', function() {
             themeToggleDarkIcon.classList.toggle('hidden');
             themeToggleLightIcon.classList.toggle('hidden');
-
-            if (localStorage.getItem('theme')) {
-                if (localStorage.getItem('theme') === 'light') {
-                    document.documentElement.classList.add('dark');
-                    localStorage.setItem('theme', 'dark');
-                } else {
-                    document.documentElement.classList.remove('dark');
-                    localStorage.setItem('theme', 'light');
-                }
+            document.documentElement.classList.toggle('dark');
+            if (document.documentElement.classList.contains('dark')) {
+                localStorage.setItem('theme', 'dark');
             } else {
-                if (document.documentElement.classList.contains('dark')) {
-                    document.documentElement.classList.remove('dark');
-                    localStorage.setItem('theme', 'light');
-                } else {
-                    document.documentElement.classList.add('dark');
-                    localStorage.setItem('theme', 'dark');
-                }
+                localStorage.setItem('theme', 'light');
             }
         });
-
 
         // --- FIREBASE AND APP LOGIC ---
         const firebaseConfig = {
@@ -227,14 +275,20 @@
         const scoresCollection = collection(db, "zip-game-scores");
         const weeklyWinnersCollection = collection(db, "zip-game-weekly-winners");
 
+        // DOM Elements
         const loadingDiv = document.getElementById('loading');
         const appContentDiv = document.getElementById('app-content');
-        const saveScoreBtn = document.getElementById('saveScoreBtn');
-        const messageBox = document.getElementById('message-box');
+        
         const arjunMinsInput = document.getElementById('arjun-mins');
         const arjunSecsInput = document.getElementById('arjun-secs');
+        const saveArjunBtn = document.getElementById('save-arjun-btn');
+        const arjunMessage = document.getElementById('arjun-message');
+
         const rishilMinsInput = document.getElementById('rishil-mins');
         const rishilSecsInput = document.getElementById('rishil-secs');
+        const saveRishilBtn = document.getElementById('save-rishil-btn');
+        const rishilMessage = document.getElementById('rishil-message');
+
         const dailyWinnerDiv = document.getElementById('dailyWinner');
         const arjunWeeklyScoreSpan = document.getElementById('arjunWeeklyScore');
         const rishilWeeklyScoreSpan = document.getElementById('rishilWeeklyScore');
@@ -244,11 +298,16 @@
         const scoreboardContent = document.getElementById('scoreboard-content');
         const scoreboardTableBody = document.getElementById('scoreboard-table-body');
         const chevronIcon = document.getElementById('chevron-icon');
+        
+        const filterControls = document.getElementById('filter-controls');
+        const dateFilterInput = document.getElementById('date-filter');
+        const historyTableBody = document.getElementById('history-table-body');
+        const historyNoResults = document.getElementById('history-no-results');
 
-        function showMessage(text, isError = false) {
-            messageBox.textContent = text;
-            messageBox.className = `mt-4 text-center font-semibold ${isError ? 'text-red-500' : 'text-green-500'}`;
-            setTimeout(() => messageBox.textContent = '', 3000);
+        function showPlayerMessage(player, text, isSuccess) {
+            const el = player === 'Arjun' ? arjunMessage : rishilMessage;
+            el.textContent = text;
+            el.className = `mt-2 text-center text-sm ${isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`;
         }
 
         function getDateString(date) {
@@ -267,48 +326,56 @@
             return startOfWeek;
         }
 
-        saveScoreBtn.addEventListener('click', async () => {
-            const arjunMins = parseInt(arjunMinsInput.value) || 0;
-            const arjunSecs = parseInt(arjunSecsInput.value) || 0;
-            const rishilMins = parseInt(rishilMinsInput.value) || 0;
-            const rishilSecs = parseInt(rishilSecsInput.value) || 0;
+        async function savePlayerTime(player) {
+            const minsInput = player === 'Arjun' ? arjunMinsInput : rishilMinsInput;
+            const secsInput = player === 'Arjun' ? arjunSecsInput : rishilSecsInput;
+            
+            const mins = parseInt(minsInput.value) || 0;
+            const secs = parseInt(secsInput.value) || 0;
 
-            if (arjunSecs > 59 || rishilSecs > 59) {
-                showMessage("Seconds must be between 0 and 59.", true); return;
+            if ((mins === 0 && secs === 0) || secs > 59) {
+                showPlayerMessage(player, "Please enter a valid time.", false);
+                return;
             }
-
-            const arjunTotalSeconds = arjunMins * 60 + arjunSecs;
-            const rishilTotalSeconds = rishilMins * 60 + rishilSecs;
-
-            if (arjunTotalSeconds <= 0 && rishilTotalSeconds <= 0) {
-                showMessage("Please enter valid times for at least one player.", true); return;
-            }
-
-            let winner = 'Tie';
-            if (arjunTotalSeconds < rishilTotalSeconds && arjunTotalSeconds > 0) winner = 'Arjun';
-            else if (rishilTotalSeconds < arjunTotalSeconds && rishilTotalSeconds > 0) winner = 'Rishil';
-            else if (arjunTotalSeconds > 0 && rishilTotalSeconds <= 0) winner = 'Arjun';
-            else if (rishilTotalSeconds > 0 && arjunTotalSeconds <= 0) winner = 'Rishil';
 
             const todayString = getDateString(new Date());
-            const scoreData = {
-                arjunTime: { mins: arjunMins, secs: arjunSecs },
-                rishilTime: { mins: rishilMins, secs: rishilSecs },
-                winner: winner,
+            const docRef = doc(scoresCollection, todayString);
+
+            const timeData = { mins, secs };
+            const dataToSave = {
                 date: todayString,
                 createdAt: Timestamp.now()
             };
+            dataToSave[`${player.toLowerCase()}Time`] = timeData;
 
             try {
-                await setDoc(doc(scoresCollection, todayString), scoreData);
-                showMessage("Today's score saved successfully!", false);
-                arjunMinsInput.value = ''; arjunSecsInput.value = '';
-                rishilMinsInput.value = ''; rishilSecsInput.value = '';
+                await setDoc(docRef, dataToSave, { merge: true });
+                showPlayerMessage(player, "Time saved!", true);
+
+                // After saving, check if both scores are in to determine a winner
+                const updatedDoc = await getDoc(docRef);
+                if (updatedDoc.exists()) {
+                    const data = updatedDoc.data();
+                    if (data.arjunTime && data.rishilTime && !data.winner) {
+                        const arjunTotal = data.arjunTime.mins * 60 + data.arjunTime.secs;
+                        const rishilTotal = data.rishilTime.mins * 60 + data.rishilTime.secs;
+                        
+                        let winner = 'Tie';
+                        if (arjunTotal < rishilTotal) winner = 'Arjun';
+                        if (rishilTotal < arjunTotal) winner = 'Rishil';
+                        
+                        await setDoc(docRef, { winner: winner }, { merge: true });
+                    }
+                }
             } catch (error) {
-                console.error("Error saving score: ", error);
-                showMessage("Failed to save score.", true);
+                console.error(`Error saving ${player}'s time:`, error);
+                showPlayerMessage(player, "Error saving time.", false);
             }
-        });
+        }
+
+        saveArjunBtn.addEventListener('click', () => savePlayerTime('Arjun'));
+        saveRishilBtn.addEventListener('click', () => savePlayerTime('Rishil'));
+
 
         async function archiveLastWeeksWinner() {
             const today = new Date();
@@ -382,14 +449,19 @@
                 const weeklyScoresByDay = {};
                 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+                let todayDocData = null;
+
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     if (data.winner === 'Arjun') arjunWins++;
                     else if (data.winner === 'Rishil') rishilWins++;
 
                     if (doc.id === todayString) {
-                        dailyWinnerDiv.textContent = data.winner;
-                        dailyWinnerDiv.className = `winner-badge winner-${data.winner.toLowerCase()}`;
+                        todayDocData = data;
+                        if (data.winner) {
+                            dailyWinnerDiv.textContent = data.winner;
+                            dailyWinnerDiv.className = `winner-badge winner-${data.winner.toLowerCase()}`;
+                        }
                     }
                     
                     const date = data.createdAt.toDate();
@@ -397,6 +469,23 @@
                     const dayName = daysOfWeek[dayIndex];
                     weeklyScoresByDay[dayName] = data;
                 });
+                
+                // Lock inputs if data for today exists
+                if(todayDocData) {
+                    if(todayDocData.arjunTime) {
+                        arjunMinsInput.disabled = true;
+                        arjunSecsInput.disabled = true;
+                        saveArjunBtn.disabled = true;
+                        showPlayerMessage('Arjun', 'Your time is locked for today.', true);
+                    }
+                    if(todayDocData.rishilTime) {
+                        rishilMinsInput.disabled = true;
+                        rishilSecsInput.disabled = true;
+                        saveRishilBtn.disabled = true;
+                        showPlayerMessage('Rishil', 'Your time is locked for today.', true);
+                    }
+                }
+
 
                 arjunWeeklyScoreSpan.textContent = arjunWins;
                 rishilWeeklyScoreSpan.textContent = rishilWins;
@@ -438,23 +527,22 @@
                 let scoreboardHtml = '';
                 daysOfWeek.forEach(day => {
                     const score = weeklyScoresByDay[day];
+                    let arjunCell = '<td class="p-3 text-gray-400 dark:text-gray-500">-</td>';
+                    let rishilCell = '<td class="p-3 text-gray-400 dark:text-gray-500">-</td>';
+                    let winnerCell = '<td class="p-3 text-gray-400 dark:text-gray-500">Pending</td>';
+
                     if (score) {
-                        scoreboardHtml += `
-                            <tr>
-                                <td class="p-3 font-medium">${day}</td>
-                                <td class="p-3">${score.arjunTime.mins}:${String(score.arjunTime.secs).padStart(2, '0')}</td>
-                                <td class="p-3">${score.rishilTime.mins}:${String(score.rishilTime.secs).padStart(2, '0')}</td>
-                                <td class="p-3"><span class="winner-badge winner-${score.winner.toLowerCase()}">${score.winner}</span></td>
-                            </tr>`;
-                    } else {
-                        scoreboardHtml += `
-                            <tr>
-                                <td class="p-3 font-medium">${day}</td>
-                                <td class="p-3 text-gray-400 dark:text-gray-500">-</td>
-                                <td class="p-3 text-gray-400 dark:text-gray-500">-</td>
-                                <td class="p-3 text-gray-400 dark:text-gray-500">Pending</td>
-                            </tr>`;
+                        if (score.arjunTime) {
+                             arjunCell = `<td class="p-3">${score.arjunTime.mins}:${String(score.arjunTime.secs).padStart(2, '0')}</td>`;
+                        }
+                        if (score.rishilTime) {
+                             rishilCell = `<td class="p-3">${score.rishilTime.mins}:${String(score.rishilTime.secs).padStart(2, '0')}</td>`;
+                        }
+                        if (score.winner) {
+                             winnerCell = `<td class="p-3"><span class="winner-badge winner-${score.winner.toLowerCase()}">${score.winner}</span></td>`;
+                        }
                     }
+                    scoreboardHtml += `<tr><td class="p-3 font-medium">${day}</td>${arjunCell}${rishilCell}${winnerCell}</tr>`;
                 });
                 scoreboardTableBody.innerHTML = scoreboardHtml;
                 
@@ -477,12 +565,84 @@
             }
         });
 
+        async function fetchAndDisplayHistory(filterType, date = new Date()) {
+            let startDate, endDate;
+            
+            switch (filterType) {
+                case 'date':
+                    startDate = new Date(date);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date(date);
+                    endDate.setHours(23, 59, 59, 999);
+                    break;
+                case 'month':
+                    startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+                    endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+                    endDate.setHours(23, 59, 59, 999);
+                    break;
+                case 'year':
+                    startDate = new Date(date.getFullYear(), 0, 1);
+                    endDate = new Date(date.getFullYear(), 11, 31);
+                    endDate.setHours(23, 59, 59, 999);
+                    break;
+                case 'week':
+                default:
+                    startDate = getStartOfWeek(date);
+                    endDate = new Date(startDate);
+                    endDate.setDate(startDate.getDate() + 7);
+                    break;
+            }
+
+            const q = query(scoresCollection, where("createdAt", ">=", startDate), where("createdAt", "<", endDate));
+            const querySnapshot = await getDocs(q);
+
+            historyTableBody.innerHTML = '';
+            if (querySnapshot.empty) {
+                historyNoResults.classList.remove('hidden');
+            } else {
+                historyNoResults.classList.add('hidden');
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    const arjunTime = data.arjunTime ? `${data.arjunTime.mins}:${String(data.arjunTime.secs).padStart(2, '0')}` : '-';
+                    const rishilTime = data.rishilTime ? `${data.rishilTime.mins}:${String(data.rishilTime.secs).padStart(2, '0')}` : '-';
+                    const winner = data.winner ? `<span class="winner-badge winner-${data.winner.toLowerCase()}">${data.winner}</span>` : 'Pending';
+
+                    const row = `
+                        <tr>
+                            <td class="p-3 font-medium">${data.date}</td>
+                            <td class="p-3">${arjunTime}</td>
+                            <td class="p-3">${rishilTime}</td>
+                            <td class="p-3">${winner}</td>
+                        </tr>`;
+                    historyTableBody.innerHTML += row;
+                });
+            }
+        }
+
+        filterControls.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                document.querySelectorAll('#filter-controls button').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                dateFilterInput.value = '';
+                fetchAndDisplayHistory(e.target.dataset.filter);
+            }
+        });
+
+        dateFilterInput.addEventListener('change', (e) => {
+            if (e.target.value) {
+                document.querySelectorAll('#filter-controls button').forEach(btn => btn.classList.remove('active'));
+                const selectedDate = new Date(e.target.value.replace(/-/g, '/'));
+                fetchAndDisplayHistory('date', selectedDate);
+            }
+        });
+
         signInAnonymously(auth)
             .then(() => {
                 console.log("Signed in anonymously.");
                 listenForScores();
                 displayLastWeeksWinner();
                 archiveLastWeeksWinner();
+                fetchAndDisplayHistory('week');
             })
             .catch((error) => {
                 console.error("Anonymous sign-in failed: ", error);
