@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zip Game Score Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -116,7 +117,6 @@
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Enter Today's Scores</h2>
                 <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Each player saves their own time. Once saved, the entry for the day is locked.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Arjun's Column -->
                     <div class="p-4 border rounded-lg dark:border-gray-700">
                         <label class="font-semibold text-lg text-blue-600 dark:text-blue-400">Arjun</label>
                         <div class="input-group my-2">
@@ -129,7 +129,6 @@
                         </button>
                         <div id="arjun-message" class="mt-2 text-center text-sm"></div>
                     </div>
-                    <!-- Rishil's Column -->
                     <div class="p-4 border rounded-lg dark:border-gray-700">
                         <label class="font-semibold text-lg text-green-600 dark:text-green-400">Rishil</label>
                         <div class="input-group my-2">
@@ -142,6 +141,14 @@
                         </button>
                         <div id="rishil-message" class="mt-2 text-center text-sm"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Performance Graph Card -->
+            <div class="card">
+                <h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">Weekly Performance Graph</h2>
+                <div>
+                    <canvas id="performanceChart"></canvas>
                 </div>
             </div>
 
@@ -194,9 +201,27 @@
                 </div>
             </div>
             
-            <div class="card text-center">
-                <h2 class="text-2xl font-semibold mb-3 text-gray-800 dark:text-gray-100">This Week's Status</h2>
-                <p id="weeklyWinner" class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">Calculating...</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="card text-center">
+                    <h2 class="text-2xl font-semibold mb-3 text-gray-800 dark:text-gray-100">Weekly Status (By Wins)</h2>
+                    <p id="weeklyWinner" class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">Calculating...</p>
+                </div>
+                <div class="card text-center">
+                    <h2 class="text-2xl font-semibold mb-3 text-gray-800 dark:text-gray-100">Weekly Time Battle</h2>
+                    <div class="flex justify-around items-center mt-4">
+                        <div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Arjun's Total</p>
+                            <p class="text-blue-600 dark:text-blue-400 font-bold text-2xl" id="arjunTotalTime">00:00</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Rishil's Total</p>
+                            <p class="text-green-600 dark:text-green-400 font-bold text-2xl" id="rishilTotalTime">00:00</p>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <p id="weeklyTimeWinner" class="text-xl font-bold text-indigo-600 dark:text-indigo-400">Calculating...</p>
+                    </div>
+                </div>
             </div>
 
             <!-- History Section -->
@@ -275,7 +300,6 @@
         const scoresCollection = collection(db, "zip-game-scores");
         const weeklyWinnersCollection = collection(db, "zip-game-weekly-winners");
 
-        // DOM Elements
         const loadingDiv = document.getElementById('loading');
         const appContentDiv = document.getElementById('app-content');
         
@@ -304,6 +328,13 @@
         const historyTableBody = document.getElementById('history-table-body');
         const historyNoResults = document.getElementById('history-no-results');
 
+        const arjunTotalTimeEl = document.getElementById('arjunTotalTime');
+        const rishilTotalTimeEl = document.getElementById('rishilTotalTime');
+        const weeklyTimeWinnerEl = document.getElementById('weeklyTimeWinner');
+
+        const chartCanvas = document.getElementById('performanceChart');
+        let performanceChart;
+
         function showPlayerMessage(player, text, isSuccess) {
             const el = player === 'Arjun' ? arjunMessage : rishilMessage;
             el.textContent = text;
@@ -324,6 +355,18 @@
             const startOfWeek = new Date(d.setDate(diff));
             startOfWeek.setHours(0, 0, 0, 0);
             return startOfWeek;
+        }
+
+        function formatTime(totalSeconds) {
+            if (isNaN(totalSeconds) || totalSeconds < 0) return '00:00';
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            if (hours > 0) {
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
         async function savePlayerTime(player) {
@@ -352,7 +395,6 @@
                 await setDoc(docRef, dataToSave, { merge: true });
                 showPlayerMessage(player, "Time saved!", true);
 
-                // After saving, check if both scores are in to determine a winner
                 const updatedDoc = await getDoc(docRef);
                 if (updatedDoc.exists()) {
                     const data = updatedDoc.data();
@@ -433,6 +475,84 @@
                  lastWeekWinnerDiv.className = 'winner-badge winner-arjun';
              }
         }
+        
+        function renderPerformanceChart(labels, arjunData, rishilData) {
+            if (performanceChart) {
+                performanceChart.destroy();
+            }
+            
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+            const textColor = isDarkMode ? '#E5E7EB' : '#374151';
+
+            performanceChart = new Chart(chartCanvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Arjun',
+                            data: arjunData,
+                            borderColor: '#3B82F6', // blue-500
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                        },
+                        {
+                            label: 'Rishil',
+                            data: rishilData,
+                            borderColor: '#10B981', // green-500
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: textColor,
+                                callback: function(value) {
+                                    const mins = Math.floor(value / 60);
+                                    const secs = value % 60;
+                                    return `${mins}:${String(secs).padStart(2, '0')}`;
+                                }
+                            },
+                            grid: { color: gridColor }
+                        },
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: textColor } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    const value = context.parsed.y;
+                                    if (value !== null) {
+                                        const mins = Math.floor(value / 60);
+                                        const secs = value % 60;
+                                        label += `${mins}m ${secs}s`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
 
         function listenForScores() {
             const startOfWeek = getStartOfWeek(new Date());
@@ -441,6 +561,8 @@
             onSnapshot(q, (querySnapshot) => {
                 let arjunWins = 0;
                 let rishilWins = 0;
+                let arjunTotalWeeklySeconds = 0;
+                let rishilTotalWeeklySeconds = 0;
                 const todayString = getDateString(new Date());
                 
                 dailyWinnerDiv.textContent = 'Pending...';
@@ -451,10 +573,17 @@
 
                 let todayDocData = null;
 
-                querySnapshot.forEach((doc) => {
+                querySnapshot.docs.sort((a, b) => a.data().createdAt.toMillis() - b.data().createdAt.toMillis()).forEach((doc) => {
                     const data = doc.data();
                     if (data.winner === 'Arjun') arjunWins++;
                     else if (data.winner === 'Rishil') rishilWins++;
+
+                    if (data.arjunTime) {
+                        arjunTotalWeeklySeconds += (data.arjunTime.mins * 60) + data.arjunTime.secs;
+                    }
+                    if (data.rishilTime) {
+                        rishilTotalWeeklySeconds += (data.rishilTime.mins * 60) + data.rishilTime.secs;
+                    }
 
                     if (doc.id === todayString) {
                         todayDocData = data;
@@ -470,7 +599,6 @@
                     weeklyScoresByDay[dayName] = data;
                 });
                 
-                // Lock inputs if data for today exists
                 if(todayDocData) {
                     if(todayDocData.arjunTime) {
                         arjunMinsInput.disabled = true;
@@ -486,9 +614,41 @@
                     }
                 }
 
-
                 arjunWeeklyScoreSpan.textContent = arjunWins;
                 rishilWeeklyScoreSpan.textContent = rishilWins;
+                
+                arjunTotalTimeEl.textContent = formatTime(arjunTotalWeeklySeconds);
+                rishilTotalTimeEl.textContent = formatTime(rishilTotalWeeklySeconds);
+
+                if (arjunTotalWeeklySeconds > 0 && rishilTotalWeeklySeconds > 0) {
+                    if (arjunTotalWeeklySeconds < rishilTotalWeeklySeconds) {
+                        weeklyTimeWinnerEl.textContent = 'Arjun is faster!';
+                        weeklyTimeWinnerEl.className = 'text-xl font-bold text-blue-600 dark:text-blue-400';
+                    } else if (rishilTotalWeeklySeconds < arjunTotalWeeklySeconds) {
+                        weeklyTimeWinnerEl.textContent = 'Rishil is faster!';
+                        weeklyTimeWinnerEl.className = 'text-xl font-bold text-green-600 dark:text-green-400';
+                    } else {
+                        weeklyTimeWinnerEl.textContent = "It's a tie!";
+                        weeklyTimeWinnerEl.className = 'text-xl font-bold text-yellow-500 dark:text-yellow-400';
+                    }
+                } else {
+                    weeklyTimeWinnerEl.textContent = 'Calculating...';
+                    weeklyTimeWinnerEl.className = 'text-xl font-semibold text-gray-500 dark:text-gray-400';
+                }
+
+                const chartLabels = [];
+                const arjunChartData = [];
+                const rishilChartData = [];
+
+                daysOfWeek.forEach(day => {
+                    const score = weeklyScoresByDay[day];
+                    if (score) {
+                        chartLabels.push(day);
+                        arjunChartData.push(score.arjunTime ? score.arjunTime.mins * 60 + score.arjunTime.secs : null);
+                        rishilChartData.push(score.rishilTime ? score.rishilTime.mins * 60 + score.rishilTime.secs : null);
+                    }
+                });
+                renderPerformanceChart(chartLabels, arjunChartData, rishilChartData);
 
                 const isSunday = new Date().getDay() === 0;
                 const playedGames = arjunWins > 0 || rishilWins > 0;
@@ -506,7 +666,7 @@
                         weeklyWinnerP.className = "text-4xl font-bold text-yellow-500 dark:text-yellow-400";
                     }
                 } else {
-                     weeklyWinnerP.parentElement.querySelector('h2').textContent = "This Week's Status";
+                     weeklyWinnerP.parentElement.querySelector('h2').textContent = "Weekly Status (By Wins)";
                      if (arjunWins > rishilWins) {
                         weeklyWinnerP.textContent = 'Arjun is leading!';
                         weeklyWinnerP.className = "text-3xl font-bold text-blue-600 dark:text-blue-400";
